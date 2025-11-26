@@ -1,0 +1,47 @@
+version: '3.8'
+
+services:
+  web:
+    build: .
+    container_name: web
+    ports:
+      - "80:5000"
+    environment:
+      FLASK_APP: main.py
+      FLASK_RUN_HOST: 0.0.0.0
+      MONGO_HOST: db_mongo
+      NEO_HOST: db_neo
+    depends_on:
+      - db_mongo
+      - db_neo
+    volumes:
+      - .:/OpenFoodFact-Equipe23
+      - .:/536931949_EQUIPE23
+    command: sh -c "python init_neo4j.py && flask run --debug"
+
+  db_mongo:
+    image: mongo:latest
+    container_name: db_mongo
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - .:/536931949_equipe23
+
+  db_neo:
+    image: neo4j:5.15
+    container_name: db_neo4j
+    ports:
+      - "7474:7474"
+      - "7687:7687"
+    environment:
+      - NEO4J_AUTH=neo4j/equipe23
+    volumes:
+      - neo4j_data:/data
+      - neo4j_logs:/logs
+      - neo4j_import:/import
+
+volumes:
+  neo4j_data:
+  neo4j_logs:
+  neo4j_import:

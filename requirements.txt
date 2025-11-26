@@ -1,0 +1,5 @@
+flask
+pymongo
+neo4j
+spacy
+langdetect
