@@ -5,6 +5,7 @@ from neo4j import GraphDatabase
 from trouver_food_categories import trouver_categories
 from food_classification import get_valid_category, category_map, collection
 from rename_fdc import rename_food_groups_fdc
+from trouver_produit_neo_equivalent_dans_mongo import trouver_liste_mongo
 from collections import Counter
 
 app = Flask(__name__)
@@ -27,7 +28,6 @@ neo4j_user = "neo4j"
 neo4j_pass = "equipe23"
 
 neo4j_driver = GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
-neo4j_session = neo4j_driver.session()
 
 @app.route("/")
 def home():
@@ -41,6 +41,7 @@ def heartbeat():
 
 @app.route('/extracted_data', methods=['GET'])
 def extracted_data():
+    neo4j_session = neo4j_driver.session()
     nb_products_off = off.count_documents({})
     nb_products_fdc = fdc.count_documents({})
     nb_products_fcne = fcne.count_documents({})
@@ -51,6 +52,7 @@ def extracted_data():
     
     recette_query = neo4j_session.run("MATCH(r:Recette) RETURN COUNT(r) AS nbRecettesCuisine",{})
     nb_recettes_cuisine = list(recette_query.single().values())[0]
+    neo4j_session.close()
     return{"ndbProduitsAlimentairesScannes": nb_produits_alimentaires_scannes, "nbProduitsAlimentairesDeBases" : nb_produits_alimentaires_de_bases,"nbRecettesCuisine":nb_recettes_cuisine}
 
 @app.route('/transformed_data', methods=['GET'])
@@ -173,7 +175,7 @@ def fdc_categorisation():
     rename_food_groups_fdc(mongo_uri,mongo_db,fdc)
     return {"results":{}}
     
-    
+
 
 @app.route("/map_mexico_categories", methods=["POST"])
 def map_mexico_categories():
@@ -680,3 +682,24 @@ def export_used_category_canada():
         "used_categories": sorted_counts
     })
 
+@app.route("/equivalent_mongo", methods=["GET"])
+def trouver_neo_equivalent_dans_mongo():
+    neo4j_session1 = neo4j_driver.session()
+    neo4j_session2 = neo4j_driver.session()
+    produit_neo_query = neo4j_session1.run("MATCH(p:Produit) RETURN p")
+    liste_produit_neo = [record["p"] for record in produit_neo_query]
+    for produit in liste_produit_neo[:50]:
+        equivalents_produit = trouver_liste_mongo(produit)
+        # update neo
+        neo4j_session2.run("""
+        MATCH (p:Produit {nom: $nom_produit})
+        UNWIND $equivalents AS eq
+        MERGE (m:MongoProduit {mongo_id: eq.id})
+        MERGE (p)-[s:EQUIVALENT]->(m)
+        SET s.score = eq.score
+        """, nom_produit=produit["nom"], equivalents=[{"id": mongo_id, "score": score}
+        for mongo_id, score in equivalents_produit])
+    
+    neo4j_session1.close()
+    neo4j_session2.close()
+    return jsonify({"test":"test2"})

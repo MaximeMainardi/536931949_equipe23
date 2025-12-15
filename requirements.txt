@@ -3,3 +3,9 @@ pymongo
 neo4j
 spacy
 langdetect
+transformers
+sentencepiece
+rapidfuzz
+sacremoses
+
+

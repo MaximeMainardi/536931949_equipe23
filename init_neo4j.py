@@ -108,11 +108,13 @@ def importer_recette(tx, recette):
     # Ingrédients
     for brut in ingredients:
         nom_produit = nettoyer_ingredient(brut)
+        liste = []
         tx.run("""
             MERGE (p:Produit {nom: $nom_produit})
             MERGE (r:Recette {name: $nom_recette})
             MERGE (r)-[:UTILISE]->(p)
-            """, nom_produit=nom_produit, nom_recette=nom_recette)
+            SET p.liste = $liste
+            """, nom_produit=nom_produit, nom_recette=nom_recette, liste=liste)
 
 
 # Charger et importer toutes les recettes depuis tous les fichiers JSON du dossier

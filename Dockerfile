@@ -5,6 +5,7 @@ ENV FLASK_APP=main.py
 ENV FLASK_RUN_HOST=0.0.0.0
 COPY requirements.txt requirements.txt
 RUN pip install -r requirements.txt
+RUN pip install torch --index-url https://download.pytorch.org/whl/cpu
 RUN python -m spacy download en_core_web_sm
 EXPOSE 5000
 COPY . .
