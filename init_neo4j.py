@@ -20,17 +20,30 @@ else:
 
 # Fonction pour nettoyer les ingrédients
 def nettoyer_ingredient(texte):
-    texte = re.sub(r"¼|½|¾","",texte)
-    texte = re.sub(r"\d+\/\d+|\d+","",texte)
-    texte = re.sub(r"\bc\.?\w*\s+à\s+(soupe|thé|café)\b","",texte)
-    texte = re.sub(r"ml\s+|g\s+|kg\s+|oz\s+|boîte|paquet|tasse|œuf|gousse|environ|tbsp|pincées|litres", "",
-                   texte, flags=re.IGNORECASE)
-    texte = re.sub(r"bonnes|","",texte, flags=re.IGNORECASE)
+    texte = re.sub(r"¼|½|¾", "", texte)
+    texte = re.sub(r"\|", "", texte)
+    texte = re.sub(r"\d+\/\d+|\d+", "", texte)
+    texte = re.sub(r"\bc\.?\s*à\s*(soupe|thé|café|table)\b", "", texte, flags=re.IGNORECASE)
+    texte = re.sub(
+        r"\b(ml|l|g|kg|oz|boîte|conserve|paquet|tasse|œuf|gousse|environ|tbsp|pincées?|litres?|feuilles?|feuille)\b",
+        "", texte, flags=re.IGNORECASE)
     texte = re.sub(r"\(.*?\)", "", texte)
-    texte = re.sub(r"\s*\d+", "", texte)
-    texte = re.sub(r"^\s*(de\s+|d’|d'|ou\s+|du\s+)","",texte,flags=re.IGNORECASE)
+    texte = re.sub(r"\b(de|d’|d'|du|le|la|les|un|une|au|aux)\b", "", texte, flags=re.IGNORECASE)
+    texte = re.sub(
+        r"\b(émincé|émincées?|haché|hachée?s?|pelé|pelée?s?|coupé|coupée?s?|dégelé|dégelée?s?|divisé|divisée?s?|égoutté|égouttée?s?|rincé|rincée?s?|ajouté|ajoutée?s?|au goût)\b",
+        "", texte, flags=re.IGNORECASE)
+    texte = re.sub(r"\ben\s+(dés|cubes?|tranches?|lamelles?|morceaux?|julienne|rondelles?)\b", "", texte,
+                   flags=re.IGNORECASE)
+    texte = re.sub(r",\s*$", "", texte)
     texte = re.sub(r"\s+", " ", texte)
     return texte.strip()
+
+def nettoyer_et_split(texte):
+    morceaux = re.split(r"\s+(et|ou)\s+", texte, flags=re.IGNORECASE)
+    ingredients = [nettoyer_ingredient(m) for m in morceaux if m.lower() not in ["et", "ou"] and m.strip()]
+    if len(ingredients) == 1:
+        return ingredients[0]
+    return ingredients
 
 # Fonction d'import d'une recette
 def importer_recette(tx, recette):
@@ -105,17 +118,18 @@ def importer_recette(tx, recette):
         MERGE (r)-[:A_COMME_TEMPS_PREPARATION]->(tp)
         """, temps=temps_preparation, nom_recette=nom_recette)
 
-    # Ingrédients
     for brut in ingredients:
-        nom_produit = nettoyer_ingredient(brut)
-        liste = []
-        tx.run("""
-            MERGE (p:Produit {nom: $nom_produit})
-            MERGE (r:Recette {name: $nom_recette})
-            MERGE (r)-[:UTILISE]->(p)
-            SET p.liste = $liste
-            """, nom_produit=nom_produit, nom_recette=nom_recette, liste=liste)
+        produits = nettoyer_et_split(brut)
 
+        if isinstance(produits, str):
+            produits = [produits]
+
+        for nom_produit in produits:
+            tx.run("""
+                MERGE (p:Produit {nom: $nom_produit})
+                MERGE (r:Recette {name: $nom_recette})
+                MERGE (r)-[:UTILISE]->(p)
+                """, nom_produit=nom_produit, nom_recette=nom_recette)
 
 # Charger et importer toutes les recettes depuis tous les fichiers JSON du dossier
 dossier = "dump_recettes"
@@ -128,3 +142,5 @@ with driver.session() as session:
                 data = json.load(f)
                 for recette in data:
                     session.execute_write(importer_recette, recette)
+
+driver.close()
