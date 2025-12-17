@@ -6,7 +6,7 @@ import re
 import time
 
 # Connexion à Neo4j
-driver = GraphDatabase.driver("bolt://db_neo:7687", auth=("neo4j", "equipe23"))
+driver = GraphDatabase.driver("bolt://localhost:7687", auth=("neo4j", "equipe23"))
 
 for attempt in range(30):
     try:
@@ -98,11 +98,13 @@ def importer_recette(tx, recette):
 
     # Type de plat
     for type_plat in types:
-        tx.run("""
-            MERGE (t:TypeDePlat {nom: $type})
-            MERGE (r:Recette {name: $nom_recette})
-            MERGE (r)-[:EST_DE_TYPE]->(t)
-            """, type=type_plat, nom_recette=nom_recette)
+        sous_types = [t.strip() for t in type_plat.split(",")]
+        for st in sous_types:
+            tx.run("""
+                MERGE (t:TypeDePlat {nom: $type})
+                MERGE (r:Recette {name: $nom_recette})
+                MERGE (r)-[:EST_DE_TYPE]->(t)
+                """, type=st, nom_recette=nom_recette)
 
     # Temps cuisson
     tx.run("""
