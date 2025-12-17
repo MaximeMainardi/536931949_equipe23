@@ -29,7 +29,13 @@ neo4j_user = "neo4j"
 neo4j_pass = "equipe23"
 
 neo4j_driver = GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
-types_neo = []
+
+def get_types_neo():
+    with neo4j_driver.session() as session:
+        result = session.run("MATCH (t:TypeDePlat) RETURN t.nom AS type")
+        return [record["type"] for record in result]
+    
+types_neo = get_types_neo()
 
 @app.route("/")
 def home():
@@ -166,26 +172,25 @@ def types():
     MATCH(t:TypeDePlat) 
     RETURN t.nom AS type
     """)
-    types_neo = [record["type"] for record in neo_query]
-    return jsonify(types_neo)
+    results = [record["type"] for record in neo_query]
+    neo4j_session.close()
+    return jsonify(results)
 
 @app.route('/recette', methods=['POST','GET'])
 def recette():
     if request.method == 'POST':
         data = request.get_json()
-        types = data.get("type")
-        types_accepte = []
-        for t in types:
-            if t in types_neo:
-                types_accepte.append(t)
+        types = data.get("type",[])
+        types_accepte = [t for t in types if t in types_neo]
+        print("DEBUG types_accepte:", types_accepte)
         neo4j_session = neo4j_driver.session()
         if types_accepte:
             random_skips = 0 # todo?
             neo_query = neo4j_session.run("""
-            MATCH (r:Recette)-[:EST_DE_TYPE]->(t:TypeDePlat)
-            WHERE t.nom IN $type_accepte
-            WITH r, collect(DISTINCT t.nom) AS matched_types
-            WHERE size(matched_types) = size($type_accepte)
+            MATCH (r:Recette)-[:EST_DE_TYPE]->(t:TypeDePlat) 
+            WHERE t.nom IN $type_accepte 
+            WITH r, collect(DISTINCT t.nom) AS matched_types 
+            WHERE size(matched_types) = size($type_accepte) 
             RETURN r {
                 name: r.name,
                 description: r.description2,
@@ -199,6 +204,7 @@ def recette():
             LIMIT 1
             """,type_accepte=types_accepte,random_skips=random_skips)
             results = [record["recette"] for record in neo_query]
+            neo4j_session.close()
             return jsonify({"recette":results})
         else:
             random_skips = random.randrange(100)
@@ -217,7 +223,9 @@ def recette():
             LIMIT 1
             """, random_skips=random_skips)
             results = [record["recette"] for record in neo_query]
+            neo4j_session.close()
             return jsonify({"recette":results})
+
     elif request.method == 'GET':
         return {"noPOST":"noRECETTE"}
 
