@@ -1,4 +1,5 @@
 import os
+import random
 from flask import Flask, jsonify, request
 from pymongo import MongoClient,UpdateOne
 from neo4j import GraphDatabase
@@ -156,6 +157,33 @@ def transformed_data():
     }
 
     return{"indicateursDeQualite" : {"NutriScore" : nbNutriScore, "Nova" : nbNova, "EcoScore" : nbEcoScore} , "categoriesProduitAlimentaire" : categories_dict_return}
+
+@app.route('/recette', methods=['POST','GET'])
+def recette():
+    if request.method == 'POST':
+        data = request.get_json()
+        types = data.get("type")
+        if types:
+            random_skips = 0
+        else:
+            random_skips = random.randrange(100)
+
+        neo4j_session = neo4j_driver.session()
+        neo_query = neo4j_session.run("""
+        MATCH(r:Recette)-[:EST_DE_TYPE]->(t:TypeDePlat) 
+        WHERE t:TypeDePlat = {type: $type_de_plat}                             
+        RETURN r 
+        SKIP $random_skips 
+        LIMIT 1
+        """, random_skips=random_skips,type_de_plat=types[0])
+        record = neo_query.single()
+        return record["r"]
+    elif request.method == 'GET':
+        return {"noPOST":"noRECETTE"}
+
+@app.route('/cuisiner', methods=['POST'])
+def cuisiner():
+    return {"":""}
 
 @app.route('/off_categorisation', methods=['GET'])
 def off_categorisation():
@@ -703,3 +731,4 @@ def trouver_neo_equivalent_dans_mongo():
     neo4j_session1.close()
     neo4j_session2.close()
     return jsonify({"test":"test2"})
+
