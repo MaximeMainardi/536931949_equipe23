@@ -6,7 +6,7 @@ import re
 import time
 
 # Connexion à Neo4j
-driver = GraphDatabase.driver("bolt://localhost:7687", auth=("neo4j", "equipe23"))
+driver = GraphDatabase.driver("bolt://db_neo:7687", auth=("neo4j", "equipe23"))
 
 for attempt in range(30):
     try:
