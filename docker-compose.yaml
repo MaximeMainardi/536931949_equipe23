@@ -18,6 +18,11 @@ services:
       - .:/OpenFoodFact-Equipe23
       - .:/536931949_EQUIPE23
     command: sh -c "python init_neo4j.py && flask run --debug"
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   db_mongo:
     image: mongo:latest
@@ -27,6 +32,11 @@ services:
       - "27017:27017"
     volumes:
       - .:/536931949_equipe23
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   db_neo:
     image: neo4j:5.15
@@ -40,6 +50,11 @@ services:
       - neo4j_data:/data
       - neo4j_logs:/logs
       - neo4j_import:/import
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
 volumes:
   neo4j_data:

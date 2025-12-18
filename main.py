@@ -15,7 +15,9 @@ mongo_host = os.getenv("MONGO_HOST","localhost")
 mongo_port = 27017
 mongo_uri = f"mongodb://{mongo_host}:{mongo_port}/"
 
-mongo_client = MongoClient(mongo_uri,serverSelectionTimeoutMS=20000)
+mongo_client = MongoClient(mongo_uri,connectTimeoutMS=60000,
+    serverSelectionTimeoutMS=60000, socketTimeoutMS=60000)
+
 mongo_db_names = mongo_client.list_database_names()
 mongo_db = mongo_client["db_mongo"]
 
@@ -764,7 +766,7 @@ def trouver_neo_equivalent_dans_mongo():
     neo4j_session2 = neo4j_driver.session()
     produit_neo_query = neo4j_session1.run("MATCH(p:Produit) RETURN p")
     liste_produit_neo = [record["p"] for record in produit_neo_query]
-    for produit in liste_produit_neo[:50]:
+    for produit in liste_produit_neo:
         equivalents_produit = trouver_liste_mongo(produit)
         # update neo
         neo4j_session2.run("""

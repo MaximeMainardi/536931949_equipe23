@@ -33,10 +33,11 @@ def trouver_liste_mongo(nom_produit_neo):
     nom_produit = translate(product_name)
     off_liste = off.find({}, {"product_name": 1})
     fdc_liste = fdc.find({}, {"product_name": 1})
-    product_liste = off_liste + fdc_liste
+    product_liste = list(off_liste) + list(fdc_liste)
+    print("product liste",product_liste)
     for doc in product_liste:
-        s = doc.get("product_name", "")
-        score = fuzz.ratio(nom_produit, s)
+        s = str(doc.get("product_name", ""))
+        score = fuzz.ratio(str(nom_produit), s)
         if score >= threshold:
             id = doc.get("_id", "")
             liste.append((id, score))
