@@ -26,13 +26,13 @@ mongo_client = MongoClient(
 )
 
 mongo_db_names = mongo_client.list_database_names()
-mongo_db = mongo_client["db_mongo"]
-
+mongo_db_off = mongo_client["off"]
+mongo_db_fdc = mongo_client["fdc"]
 # depend de nos collections et si changement alors doit corriger les requetes
-fdc = mongo_db["fdc"]
-off = mongo_db["off"]
+fdc = mongo_db_fdc["fdc"]
+off = mongo_db_off["off"]
 
-neo4j_uri = "bolt://db_neo4j:7687"
+neo4j_uri = "bolt://db-neo4j:7687"
 neo4j_user = "neo4j"
 neo4j_pass = "equipe23"
 
