@@ -17,7 +17,7 @@ services:
     volumes:
       - .:/OpenFoodFact-Equipe23
       - .:/536931949_EQUIPE23
-    command: sh -c "python init_neo4j.py && flask run --debug"
+    command: sh -c "flask run --debug"
     logging:
       driver: "json-file"
       options:

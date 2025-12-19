@@ -1,5 +1,6 @@
 import os
 import random
+import logging
 from flask import Flask, jsonify, request
 from pymongo import MongoClient, UpdateOne
 from neo4j import GraphDatabase
@@ -10,6 +11,8 @@ from trouver_produit_neo_equivalent_dans_mongo import trouver_liste_mongo
 from collections import Counter
 
 app = Flask(__name__)
+
+logging.basicConfig(level=logging.INFO)
 
 mongo_host = os.getenv("MONGO_HOST", "localhost")
 mongo_port = 27017
@@ -27,7 +30,6 @@ mongo_db = mongo_client["db_mongo"]
 
 # depend de nos collections et si changement alors doit corriger les requetes
 fdc = mongo_db["fdc"]
-fcne = mongo_db["fcne"]
 off = mongo_db["off"]
 
 neo4j_uri = "bolt://db_neo4j:7687"
@@ -65,18 +67,18 @@ def extracted_data():
     neo4j_session = neo4j_driver.session()
     nb_products_off = off.count_documents({})
     nb_products_fdc = fdc.count_documents({})
-    nb_products_fcne = fcne.count_documents({})
     nb_products_off_code_start_200 = off.count_documents({"code": {"$regex": "^200"}})
     nb_products_off_code_start_999 = off.count_documents({"code": {"$regex": "^999"}})
-    nb_produits_alimentaires_scannes: int = nb_products_off - (
-        nb_products_off_code_start_200 + nb_products_off_code_start_999
-    )
-    nb_produits_alimentaires_de_bases: int = (
-        nb_products_fdc
-        + nb_products_fcne
-        + nb_products_off_code_start_200
+
+    nb_products_off_base = off.count_documents({"nova_group": 1})
+    nb_products_fdc_base = fdc.count_documents({"nova_group": 1})
+
+    nb_produits_alimentaires_scannes: int = (nb_products_off + nb_products_fdc) - (
+        nb_products_off_code_start_200
         + nb_products_off_code_start_999
+        + nb_products_fdc_base
     )
+    nb_produits_alimentaires_de_bases: int = nb_products_off_base + nb_products_fdc_base
 
     recette_query = neo4j_session.run(
         "MATCH(r:Recette) RETURN COUNT(r) AS nbRecettesCuisine", {}
@@ -314,7 +316,6 @@ def recette():
         data = request.get_json()
         types = data.get("type", [])
         types_accepte = [t for t in types if t in types_neo]
-        print("DEBUG types_accepte:", types_accepte)
         neo4j_session = neo4j_driver.session()
         if types_accepte:
             random_skips = 0  # todo?
@@ -374,7 +375,6 @@ def cuisiner():
     if request.method == "POST":
         data = request.get_json()
         nom_recette = data.get("recette", {}).get("nom", None)
-        print("DEBUG nom_recette:", nom_recette)
         neo4j_session1 = neo4j_driver.session()
         ingredients_query = neo4j_session1.run(
             """
@@ -385,26 +385,23 @@ def cuisiner():
         )
         ingredients = [record["ingredient"] for record in ingredients_query]
         neo4j_session1.close()
-        print("DEBUG ingredients:", ingredients)
-        preference_marque = data.get("preferenceMarqueProduit", [])
+        preference_marque = data.get("preferenceMarqueProduit", [""])
         liste_marques = [marque.lower() for marque in preference_marque]
         nutriscore = data.get("indicateursDeQualiteSuperieurA", {}).get(
             "NutriScore", None
         )
-        print("DEBUG nutriscore:", nutriscore)
         novascore_str = data.get("indicateursDeQualiteSuperieurA", {}).get("Nova", None)
 
         if novascore_str.isdigit():
             novascore = int(novascore_str)
-        print("DEBUG novascore:", novascore)
         ecoscore = data.get("indicateursDeQualiteSuperieurA", {}).get("EcoScore", None)
-        print("DEBUG ecoscore:", ecoscore)
         liste_nutriscore = ["a", "b", "c", "d", "e"]
         liste_novascore = [1, 2, 3, 4]
-        liste_ecoscore = ["a", "b", "c", "d", "e"]
+        liste_ecoscore = ["a", "b", "c", "d", "e", "f"]
 
         neo4j_session = neo4j_driver.session()
-        liste_all_recommendations = []
+        liste_all_recommendations = {}
+        ingredient_counter = 1
 
         for ingredient in ingredients:
             liste_recomandation = []
@@ -416,59 +413,75 @@ def cuisiner():
             """,
                 ingredient=ingredient,
             )
-            mongo_ids = [record["mongo_ids"] for record in equivalent_query]
-            print("DEBUG mongo_ids:", mongo_ids)
+            mongo_ids = equivalent_query.single()["mongo_ids"]
             for mongo_id in mongo_ids:
                 counter = 4
-                current_equivalent = off.find_one({"_id": mongo_id})
                 produit_de_base = False
+                current_equivalent = off.find_one({"_id": mongo_id})
                 if not current_equivalent:
                     current_equivalent = fdc.find_one({"_id": mongo_id})
+                if not current_equivalent:
+
+                    continue
+
+                current_product_name = current_equivalent.get("product_name", "")
+                current_brand = current_equivalent.get("brands", "")
+                current_novascore = current_equivalent.get("nova_group", 4)
+                current_nutriscore = current_equivalent.get("nutriscore_grade", "e")
+                current_ecoscore = current_equivalent.get("ecoscore_grade", "e")
+                current_category = current_equivalent.get("category_ca", "")
+
                 if (
                     len(liste_marques) > 0
-                    and current_equivalent["brands"].lower() not in liste_marques
+                    and current_brand.lower() not in liste_marques
                 ):
-                    counter -= 1
+                    if not (len(liste_marques) == 1 and liste_marques[0] == ""):
+                        continue
                 if not novascore or (
-                    novascore in liste_novascore
-                    and current_equivalent["nova_group"] > novascore
+                    novascore in liste_novascore and current_novascore > novascore
                 ):
-                    if current_equivalent["nova_group"] == 1:
+                    if current_novascore == 1:
                         produit_de_base = True
-                    counter -= 1
-                if nutriscore.lower() not in liste_nutriscore or (
+                    continue
+                if (
                     nutriscore.lower() in liste_nutriscore
-                    and current_equivalent["nutriscore_grade"].lower()
-                    > nutriscore.lower()
+                    and current_nutriscore.lower() > nutriscore.lower()
                 ):
-                    counter -= 1
-                if ecoscore.lower() not in liste_ecoscore or (
+                    continue
+                if (
                     ecoscore.lower() in liste_ecoscore
-                    and current_equivalent["ecoscore_grade"].lower() > ecoscore.lower()
+                    and current_ecoscore.lower() > ecoscore.lower()
                 ):
-                    counter -= 1
-                if counter == 0:
                     continue
 
                 current_equivalent_info = {
-                    "nomProduit": current_equivalent.get("product_name", ""),
-                    "marque": current_equivalent.get("brands", ""),
+                    "nomProduit": current_product_name,
+                    "marque": current_brand,
                     "indicateurDeQualite": {
-                        "nutriscore_grade": current_equivalent.get(
-                            "nutriscore_grade", ""
-                        ),
-                        "Nova_group": current_equivalent.get("nova_group", ""),
-                        "ecoscore_grade": current_equivalent.get("ecoscore_grade", ""),
+                        "nutriscore_grade": current_nutriscore,
+                        "Nova_group": current_novascore,
+                        "ecoscore_grade": current_ecoscore,
                     },
-                    "categorie": current_equivalent.get("category_ca", ""),
+                    "categorie": current_category,
                     "produitDeBase": produit_de_base,
                 }
 
-                liste_recomandation.append(current_equivalent_info, counter)
-            liste_recomandation_trie = liste_recomandation.sort(
-                key=lambda x: x[1], reverse=True
+                liste_recomandation.append([current_equivalent_info, counter])
+
+            liste_recomandation_trie = sorted(
+                liste_recomandation, key=lambda x: x[1], reverse=True
             )
-            liste_all_recommendations.append(liste_recomandation_trie)
+
+            liste_formate_trie = [
+                {f"recommandationProduit{indx+1:02d}": item[0]}
+                for indx, item in enumerate(liste_recomandation_trie)
+            ]
+
+            liste_all_recommendations[
+                f"ingredientDeLaRecette{ingredient_counter:02d}"
+            ] = liste_formate_trie
+            ingredient_counter += 1
+
         neo4j_session.close()
         return jsonify(liste_all_recommendations)
     elif request.method == "GET":
