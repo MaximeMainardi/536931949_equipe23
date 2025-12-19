@@ -1,7 +1,7 @@
 import os
 import random
 import logging
-from flask import Flask, jsonify, request
+from flask import Flask, jsonify, request, Response
 from pymongo import MongoClient, UpdateOne
 from neo4j import GraphDatabase
 from trouver_food_categories import trouver_categories
@@ -295,6 +295,15 @@ def transformed_data():
         "categoriesProduitAlimentaire": categories_dict_return,
     }
 
+@app.route("/readme", methods=["GET"])
+def get_readme():
+    if not os.path.exists("README.md"):
+        return jsonify({"error": "README.md introuvable"}), 404
+
+    with open("README.md", "r", encoding="utf-8") as file:
+        content = file.read()
+
+    return Response(content, mimetype="text/markdown")
 
 @app.route("/type", methods=["GET"])
 def types():

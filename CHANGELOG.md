@@ -32,3 +32,25 @@
 ## Retiré
 
 - Base de données MySQL
+
+# V3 - 19 décembre 2025
+
+## Nouveau
+
+- Introduction
+- Section 5.1: Création de recommendations de produits
+- Section 5.2: Obtention de recommendations de produits
+- Section 6.1: Description du plan d'expansion
+- Section 6.2: Stratégie de réplication
+- Section 6.3: Stratégie de partitionnement
+- Section 6.4: Sécurité des bases de données
+- Section 7: Fonctionnalités additionnelles
+- Application: GET/readme
+- Application: GET/type
+- Application: POST/recette
+- Application: POST/cuisiner
+
+## Modifié
+
+- README.md
+- Application: Docker Compose
