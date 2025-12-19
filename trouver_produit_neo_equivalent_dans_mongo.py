@@ -1,5 +1,6 @@
 import os
 
+from itertools import chain
 from rapidfuzz import fuzz
 from pymongo import MongoClient
 from transformers import MarianMTModel, MarianTokenizer
@@ -21,20 +22,22 @@ fdc = mongo_db["fdc"]
 fcne = mongo_db["fcne"]
 off = mongo_db["off"]
 
+
 def translate(text):
     tokens = tokenizer([text], return_tensors="pt", padding=True)
     output = model.generate(**tokens)
     return tokenizer.decode(output[0], skip_special_tokens=True)
+
 
 def trouver_liste_mongo(nom_produit_neo):
     product_name = nom_produit_neo["nom"]
     threshold = 80  # similarity threshold (0–100)
     liste = []
     nom_produit = translate(product_name)
-    off_liste = off.find({}, {"product_name": 1})
-    fdc_liste = fdc.find({}, {"product_name": 1})
-    product_liste = list(off_liste) + list(fdc_liste)
-    print("product liste",product_liste)
+    product_liste = chain(
+        off.find({}, {"product_name": 1}),
+        fdc.find({}, {"product_name": 1}),
+    )
     for doc in product_liste:
         s = str(doc.get("product_name", ""))
         score = fuzz.ratio(str(nom_produit), s)

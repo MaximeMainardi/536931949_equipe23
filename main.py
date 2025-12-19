@@ -1,7 +1,7 @@
 import os
 import random
 from flask import Flask, jsonify, request
-from pymongo import MongoClient,UpdateOne
+from pymongo import MongoClient, UpdateOne
 from neo4j import GraphDatabase
 from trouver_food_categories import trouver_categories
 from food_classification import get_valid_category, category_map, collection
@@ -11,17 +11,21 @@ from collections import Counter
 
 app = Flask(__name__)
 
-mongo_host = os.getenv("MONGO_HOST","localhost")
+mongo_host = os.getenv("MONGO_HOST", "localhost")
 mongo_port = 27017
 mongo_uri = f"mongodb://{mongo_host}:{mongo_port}/"
 
-mongo_client = MongoClient(mongo_uri,connectTimeoutMS=60000,
-    serverSelectionTimeoutMS=60000, socketTimeoutMS=60000)
+mongo_client = MongoClient(
+    mongo_uri,
+    connectTimeoutMS=60000,
+    serverSelectionTimeoutMS=60000,
+    socketTimeoutMS=60000,
+)
 
 mongo_db_names = mongo_client.list_database_names()
 mongo_db = mongo_client["db_mongo"]
 
-#depend de nos collections et si changement alors doit corriger les requetes
+# depend de nos collections et si changement alors doit corriger les requetes
 fdc = mongo_db["fdc"]
 fcne = mongo_db["fcne"]
 off = mongo_db["off"]
@@ -32,95 +36,210 @@ neo4j_pass = "equipe23"
 
 neo4j_driver = GraphDatabase.driver(neo4j_uri, auth=(neo4j_user, neo4j_pass))
 
+
 def get_types_neo():
     with neo4j_driver.session() as session:
         result = session.run("MATCH (t:TypeDePlat) RETURN t.nom AS type")
         return [record["type"] for record in result]
-    
+
+
 types_neo = get_types_neo()
+
 
 @app.route("/")
 def home():
     return "Flask + PyMongo ready!"
+
+
 if __name__ == "__main__":
     app.run(debug=True)
 
-@app.route('/heartbeat', methods=['GET'])
+
+@app.route("/heartbeat", methods=["GET"])
 def heartbeat():
     return {"nomApplication": "FoodFacts"}
 
-@app.route('/extracted_data', methods=['GET'])
+
+@app.route("/extracted_data", methods=["GET"])
 def extracted_data():
     neo4j_session = neo4j_driver.session()
     nb_products_off = off.count_documents({})
     nb_products_fdc = fdc.count_documents({})
     nb_products_fcne = fcne.count_documents({})
-    nb_products_off_code_start_200 = off.count_documents({"code":{"$regex":"^200"}})
-    nb_products_off_code_start_999 = off.count_documents({"code":{"$regex":"^999"}})
-    nb_produits_alimentaires_scannes:int = nb_products_off - (nb_products_off_code_start_200 + nb_products_off_code_start_999)
-    nb_produits_alimentaires_de_bases:int = nb_products_fdc + nb_products_fcne + nb_products_off_code_start_200 + nb_products_off_code_start_999
-    
-    recette_query = neo4j_session.run("MATCH(r:Recette) RETURN COUNT(r) AS nbRecettesCuisine",{})
+    nb_products_off_code_start_200 = off.count_documents({"code": {"$regex": "^200"}})
+    nb_products_off_code_start_999 = off.count_documents({"code": {"$regex": "^999"}})
+    nb_produits_alimentaires_scannes: int = nb_products_off - (
+        nb_products_off_code_start_200 + nb_products_off_code_start_999
+    )
+    nb_produits_alimentaires_de_bases: int = (
+        nb_products_fdc
+        + nb_products_fcne
+        + nb_products_off_code_start_200
+        + nb_products_off_code_start_999
+    )
+
+    recette_query = neo4j_session.run(
+        "MATCH(r:Recette) RETURN COUNT(r) AS nbRecettesCuisine", {}
+    )
     nb_recettes_cuisine = list(recette_query.single().values())[0]
     neo4j_session.close()
-    return{"ndbProduitsAlimentairesScannes": nb_produits_alimentaires_scannes, "nbProduitsAlimentairesDeBases" : nb_produits_alimentaires_de_bases,"nbRecettesCuisine":nb_recettes_cuisine}
+    return {
+        "ndbProduitsAlimentairesScannes": nb_produits_alimentaires_scannes,
+        "nbProduitsAlimentairesDeBases": nb_produits_alimentaires_de_bases,
+        "nbRecettesCuisine": nb_recettes_cuisine,
+    }
 
-@app.route('/transformed_data', methods=['GET'])
+
+@app.route("/transformed_data", methods=["GET"])
 def transformed_data():
-    
-    nbNutriScore = off.count_documents({"nutriscore_grade":{"$regex":"^[a-e]$","$options":"i"}})
-    nbNova = off.count_documents({"nova_group":{"$gte":1,"$lte":4}})
-    nbEcoScore = off.count_documents({"ecoscore_grade":{"$regex":"^[a-e]$","$options":"i"}})
-    nb_1120:int = off.count_documents({"category_code_ca":"1120"}) + fdc.count_documents({"category_code_ca":"1120"})
-    nb_1210:int = off.count_documents({"category_code_ca":"1210"}) + fdc.count_documents({"category_code_ca":"1210"})
-    nb_1220:int = off.count_documents({"category_code_ca":"1220"}) + fdc.count_documents({"category_code_ca":"1220"})
-    nb_1230:int = off.count_documents({"category_code_ca":"1230"}) + fdc.count_documents({"category_code_ca":"1230"})
-    nb_1240:int = off.count_documents({"category_code_ca":"1240"}) + fdc.count_documents({"category_code_ca":"1240"})
-    nb_2100:int = off.count_documents({"category_code_ca":"2100"}) + fdc.count_documents({"category_code_ca":"2100"})
-    nb_2210:int = off.count_documents({"category_code_ca":"2210"}) + fdc.count_documents({"category_code_ca":"2210"})
-    nb_2220:int = off.count_documents({"category_code_ca":"2220"}) + fdc.count_documents({"category_code_ca":"2220"})
-    nb_3200:int = off.count_documents({"category_code_ca":"3200"}) + fdc.count_documents({"category_code_ca":"3200"})
-    nb_3300:int = off.count_documents({"category_code_ca":"3300"}) + fdc.count_documents({"category_code_ca":"3300"})
-    nb_3400:int = off.count_documents({"category_code_ca":"3400"}) + fdc.count_documents({"category_code_ca":"3400"})
-    nb_3500:int = off.count_documents({"category_code_ca":"3500"}) + fdc.count_documents({"category_code_ca":"3500"})
-    nb_3600:int = off.count_documents({"category_code_ca":"3600"}) + fdc.count_documents({"category_code_ca":"3600"})
-    nb_3700:int = off.count_documents({"category_code_ca":"3700"}) + fdc.count_documents({"category_code_ca":"3700"})
-    nb_4200:int = off.count_documents({"category_code_ca":"4200"}) + fdc.count_documents({"category_code_ca":"4200"})
-    nb_4300:int = off.count_documents({"category_code_ca":"4300"}) + fdc.count_documents({"category_code_ca":"4300"})
-    nb_4400:int = off.count_documents({"category_code_ca":"4400"}) + fdc.count_documents({"category_code_ca":"4400"})
-    nb_4500:int = off.count_documents({"category_code_ca":"4500"}) + fdc.count_documents({"category_code_ca":"4500"})
-    nb_4600:int = off.count_documents({"category_code_ca":"4600"}) + fdc.count_documents({"category_code_ca":"4600"})
-    nb_4700:int = off.count_documents({"category_code_ca":"4700"}) + fdc.count_documents({"category_code_ca":"4700"})
-    nb_4710:int = off.count_documents({"category_code_ca":"4710"}) + fdc.count_documents({"category_code_ca":"4710"})
-    nb_4800:int = off.count_documents({"category_code_ca":"4800"}) + fdc.count_documents({"category_code_ca":"4800"})
-    nb_4900:int = off.count_documents({"category_code_ca":"4900"}) + fdc.count_documents({"category_code_ca":"4900"})
-    nb_5110:int = off.count_documents({"category_code_ca":"5110"}) + fdc.count_documents({"category_code_ca":"5110"})
-    nb_5120:int = off.count_documents({"category_code_ca":"5120"}) + fdc.count_documents({"category_code_ca":"5120"})
-    nb_5130:int = off.count_documents({"category_code_ca":"5130"}) + fdc.count_documents({"category_code_ca":"5130"})
-    nb_5140:int = off.count_documents({"category_code_ca":"5140"}) + fdc.count_documents({"category_code_ca":"5140"})
-    nb_5150:int = off.count_documents({"category_code_ca":"5150"}) + fdc.count_documents({"category_code_ca":"5150"})
-    nb_5160:int = off.count_documents({"category_code_ca":"5160"}) + fdc.count_documents({"category_code_ca":"5160"})
-    nb_5170:int = off.count_documents({"category_code_ca":"5170"}) + fdc.count_documents({"category_code_ca":"5170"})
-    nb_5180:int = off.count_documents({"category_code_ca":"5180"}) + fdc.count_documents({"category_code_ca":"5180"})
-    nb_6100:int = off.count_documents({"category_code_ca":"6100"}) + fdc.count_documents({"category_code_ca":"6100"})
-    nb_6200:int = off.count_documents({"category_code_ca":"6200"}) + fdc.count_documents({"category_code_ca":"6200"})
-    nb_6300:int = off.count_documents({"category_code_ca":"6300"}) + fdc.count_documents({"category_code_ca":"6300"})
-    nb_6400:int = off.count_documents({"category_code_ca":"6400"}) + fdc.count_documents({"category_code_ca":"6400"})
-    nb_6510:int = off.count_documents({"category_code_ca":"6510"}) + fdc.count_documents({"category_code_ca":"6510"})
-    nb_6520:int = off.count_documents({"category_code_ca":"6520"}) + fdc.count_documents({"category_code_ca":"6520"})
-    nb_6600:int = off.count_documents({"category_code_ca":"6600"}) + fdc.count_documents({"category_code_ca":"6600"})
-    nb_7110:int = off.count_documents({"category_code_ca":"7110"}) + fdc.count_documents({"category_code_ca":"7110"})
-    nb_7120:int = off.count_documents({"category_code_ca":"7120"}) + fdc.count_documents({"category_code_ca":"7120"})
-    nb_8100:int = off.count_documents({"category_code_ca":"8100"}) + fdc.count_documents({"category_code_ca":"8100"})
-    nb_8200:int = off.count_documents({"category_code_ca":"8200"}) + fdc.count_documents({"category_code_ca":"8200"})
-    nb_8300:int = off.count_documents({"category_code_ca":"8300"}) + fdc.count_documents({"category_code_ca":"8300"})
-    nb_8500:int = off.count_documents({"category_code_ca":"8500"}) + fdc.count_documents({"category_code_ca":"8500"})
-    nb_9990:int = off.count_documents({"category_code_ca":"9990"}) + fdc.count_documents({"category_code_ca":"9990"})
+
+    nbNutriScore = off.count_documents(
+        {"nutriscore_grade": {"$regex": "^[a-e]$", "$options": "i"}}
+    )
+    nbNova = off.count_documents({"nova_group": {"$gte": 1, "$lte": 4}})
+    nbEcoScore = off.count_documents(
+        {"ecoscore_grade": {"$regex": "^[a-e]$", "$options": "i"}}
+    )
+    nb_1120: int = off.count_documents(
+        {"category_code_ca": "1120"}
+    ) + fdc.count_documents({"category_code_ca": "1120"})
+    nb_1210: int = off.count_documents(
+        {"category_code_ca": "1210"}
+    ) + fdc.count_documents({"category_code_ca": "1210"})
+    nb_1220: int = off.count_documents(
+        {"category_code_ca": "1220"}
+    ) + fdc.count_documents({"category_code_ca": "1220"})
+    nb_1230: int = off.count_documents(
+        {"category_code_ca": "1230"}
+    ) + fdc.count_documents({"category_code_ca": "1230"})
+    nb_1240: int = off.count_documents(
+        {"category_code_ca": "1240"}
+    ) + fdc.count_documents({"category_code_ca": "1240"})
+    nb_2100: int = off.count_documents(
+        {"category_code_ca": "2100"}
+    ) + fdc.count_documents({"category_code_ca": "2100"})
+    nb_2210: int = off.count_documents(
+        {"category_code_ca": "2210"}
+    ) + fdc.count_documents({"category_code_ca": "2210"})
+    nb_2220: int = off.count_documents(
+        {"category_code_ca": "2220"}
+    ) + fdc.count_documents({"category_code_ca": "2220"})
+    nb_3200: int = off.count_documents(
+        {"category_code_ca": "3200"}
+    ) + fdc.count_documents({"category_code_ca": "3200"})
+    nb_3300: int = off.count_documents(
+        {"category_code_ca": "3300"}
+    ) + fdc.count_documents({"category_code_ca": "3300"})
+    nb_3400: int = off.count_documents(
+        {"category_code_ca": "3400"}
+    ) + fdc.count_documents({"category_code_ca": "3400"})
+    nb_3500: int = off.count_documents(
+        {"category_code_ca": "3500"}
+    ) + fdc.count_documents({"category_code_ca": "3500"})
+    nb_3600: int = off.count_documents(
+        {"category_code_ca": "3600"}
+    ) + fdc.count_documents({"category_code_ca": "3600"})
+    nb_3700: int = off.count_documents(
+        {"category_code_ca": "3700"}
+    ) + fdc.count_documents({"category_code_ca": "3700"})
+    nb_4200: int = off.count_documents(
+        {"category_code_ca": "4200"}
+    ) + fdc.count_documents({"category_code_ca": "4200"})
+    nb_4300: int = off.count_documents(
+        {"category_code_ca": "4300"}
+    ) + fdc.count_documents({"category_code_ca": "4300"})
+    nb_4400: int = off.count_documents(
+        {"category_code_ca": "4400"}
+    ) + fdc.count_documents({"category_code_ca": "4400"})
+    nb_4500: int = off.count_documents(
+        {"category_code_ca": "4500"}
+    ) + fdc.count_documents({"category_code_ca": "4500"})
+    nb_4600: int = off.count_documents(
+        {"category_code_ca": "4600"}
+    ) + fdc.count_documents({"category_code_ca": "4600"})
+    nb_4700: int = off.count_documents(
+        {"category_code_ca": "4700"}
+    ) + fdc.count_documents({"category_code_ca": "4700"})
+    nb_4710: int = off.count_documents(
+        {"category_code_ca": "4710"}
+    ) + fdc.count_documents({"category_code_ca": "4710"})
+    nb_4800: int = off.count_documents(
+        {"category_code_ca": "4800"}
+    ) + fdc.count_documents({"category_code_ca": "4800"})
+    nb_4900: int = off.count_documents(
+        {"category_code_ca": "4900"}
+    ) + fdc.count_documents({"category_code_ca": "4900"})
+    nb_5110: int = off.count_documents(
+        {"category_code_ca": "5110"}
+    ) + fdc.count_documents({"category_code_ca": "5110"})
+    nb_5120: int = off.count_documents(
+        {"category_code_ca": "5120"}
+    ) + fdc.count_documents({"category_code_ca": "5120"})
+    nb_5130: int = off.count_documents(
+        {"category_code_ca": "5130"}
+    ) + fdc.count_documents({"category_code_ca": "5130"})
+    nb_5140: int = off.count_documents(
+        {"category_code_ca": "5140"}
+    ) + fdc.count_documents({"category_code_ca": "5140"})
+    nb_5150: int = off.count_documents(
+        {"category_code_ca": "5150"}
+    ) + fdc.count_documents({"category_code_ca": "5150"})
+    nb_5160: int = off.count_documents(
+        {"category_code_ca": "5160"}
+    ) + fdc.count_documents({"category_code_ca": "5160"})
+    nb_5170: int = off.count_documents(
+        {"category_code_ca": "5170"}
+    ) + fdc.count_documents({"category_code_ca": "5170"})
+    nb_5180: int = off.count_documents(
+        {"category_code_ca": "5180"}
+    ) + fdc.count_documents({"category_code_ca": "5180"})
+    nb_6100: int = off.count_documents(
+        {"category_code_ca": "6100"}
+    ) + fdc.count_documents({"category_code_ca": "6100"})
+    nb_6200: int = off.count_documents(
+        {"category_code_ca": "6200"}
+    ) + fdc.count_documents({"category_code_ca": "6200"})
+    nb_6300: int = off.count_documents(
+        {"category_code_ca": "6300"}
+    ) + fdc.count_documents({"category_code_ca": "6300"})
+    nb_6400: int = off.count_documents(
+        {"category_code_ca": "6400"}
+    ) + fdc.count_documents({"category_code_ca": "6400"})
+    nb_6510: int = off.count_documents(
+        {"category_code_ca": "6510"}
+    ) + fdc.count_documents({"category_code_ca": "6510"})
+    nb_6520: int = off.count_documents(
+        {"category_code_ca": "6520"}
+    ) + fdc.count_documents({"category_code_ca": "6520"})
+    nb_6600: int = off.count_documents(
+        {"category_code_ca": "6600"}
+    ) + fdc.count_documents({"category_code_ca": "6600"})
+    nb_7110: int = off.count_documents(
+        {"category_code_ca": "7110"}
+    ) + fdc.count_documents({"category_code_ca": "7110"})
+    nb_7120: int = off.count_documents(
+        {"category_code_ca": "7120"}
+    ) + fdc.count_documents({"category_code_ca": "7120"})
+    nb_8100: int = off.count_documents(
+        {"category_code_ca": "8100"}
+    ) + fdc.count_documents({"category_code_ca": "8100"})
+    nb_8200: int = off.count_documents(
+        {"category_code_ca": "8200"}
+    ) + fdc.count_documents({"category_code_ca": "8200"})
+    nb_8300: int = off.count_documents(
+        {"category_code_ca": "8300"}
+    ) + fdc.count_documents({"category_code_ca": "8300"})
+    nb_8500: int = off.count_documents(
+        {"category_code_ca": "8500"}
+    ) + fdc.count_documents({"category_code_ca": "8500"})
+    nb_9990: int = off.count_documents(
+        {"category_code_ca": "9990"}
+    ) + fdc.count_documents({"category_code_ca": "9990"})
 
     categories_dict_return = {
-        "1120 - Fruits" : nb_1120,
-        "1210 - Légumes vert foncé" : nb_1210,
-        "1220 - Légumes jaune foncé ou orange" : nb_1220,
+        "1120 - Fruits": nb_1120,
+        "1210 - Légumes vert foncé": nb_1210,
+        "1220 - Légumes jaune foncé ou orange": nb_1220,
         "1230 - Légumes féculents": nb_1230,
         "1240 - Autres légumes": nb_1240,
         "2100 - Grains entiers (100%)": nb_2100,
@@ -162,33 +281,45 @@ def transformed_data():
         "8200 - Substituts de repas et suppléments": nb_8200,
         "8300 - Boissons alcooliques": nb_8300,
         "8500 - Aliments divers (les ingrédients, les fines herbes, les épices, les bonbons sans sucre, les mélanges non préparés)": nb_8500,
-        "9990 - Aliments et boissons non classés (en raison de données manquantes)": nb_9990
+        "9990 - Aliments et boissons non classés (en raison de données manquantes)": nb_9990,
     }
 
-    return{"indicateursDeQualite" : {"NutriScore" : nbNutriScore, "Nova" : nbNova, "EcoScore" : nbEcoScore} , "categoriesProduitAlimentaire" : categories_dict_return}
+    return {
+        "indicateursDeQualite": {
+            "NutriScore": nbNutriScore,
+            "Nova": nbNova,
+            "EcoScore": nbEcoScore,
+        },
+        "categoriesProduitAlimentaire": categories_dict_return,
+    }
 
-@app.route('/type', methods=['GET'])
+
+@app.route("/type", methods=["GET"])
 def types():
     neo4j_session = neo4j_driver.session()
-    neo_query = neo4j_session.run("""
+    neo_query = neo4j_session.run(
+        """
     MATCH(t:TypeDePlat) 
     RETURN t.nom AS type
-    """)
+    """
+    )
     results = [record["type"] for record in neo_query]
     neo4j_session.close()
     return jsonify(results)
 
-@app.route('/recette', methods=['POST','GET'])
+
+@app.route("/recette", methods=["POST", "GET"])
 def recette():
-    if request.method == 'POST':
+    if request.method == "POST":
         data = request.get_json()
-        types = data.get("type",[])
+        types = data.get("type", [])
         types_accepte = [t for t in types if t in types_neo]
         print("DEBUG types_accepte:", types_accepte)
         neo4j_session = neo4j_driver.session()
         if types_accepte:
-            random_skips = 0 # todo?
-            neo_query = neo4j_session.run("""
+            random_skips = 0  # todo?
+            neo_query = neo4j_session.run(
+                """
             MATCH (r:Recette)-[:EST_DE_TYPE]->(t:TypeDePlat) 
             WHERE t.nom IN $type_accepte 
             WITH r, collect(DISTINCT t.nom) AS matched_types 
@@ -204,13 +335,17 @@ def recette():
             } AS recette
             SKIP $random_skips
             LIMIT 1
-            """,type_accepte=types_accepte,random_skips=random_skips)
+            """,
+                type_accepte=types_accepte,
+                random_skips=random_skips,
+            )
             results = [record["recette"] for record in neo_query]
             neo4j_session.close()
-            return jsonify({"recette":results})
+            return jsonify({"recette": results})
         else:
             random_skips = random.randrange(100)
-            neo_query = neo4j_session.run("""
+            neo_query = neo4j_session.run(
+                """
             MATCH(r:Recette)                           
             RETURN r {
                 name: r.name,
@@ -223,36 +358,141 @@ def recette():
             } AS recette
             SKIP $random_skips 
             LIMIT 1
-            """, random_skips=random_skips)
+            """,
+                random_skips=random_skips,
+            )
             results = [record["recette"] for record in neo_query]
             neo4j_session.close()
-            return jsonify({"recette":results})
+            return jsonify({"recette": results})
 
-    elif request.method == 'GET':
-        return {"noPOST":"noRECETTE"}
+    elif request.method == "GET":
+        return {"noPOST": "noRECETTE"}
 
-@app.route('/cuisiner', methods=['POST'])
+
+@app.route("/cuisiner", methods=["POST", "GET"])
 def cuisiner():
-    return {"":""}
+    if request.method == "POST":
+        data = request.get_json()
+        nom_recette = data.get("recette", {}).get("nom", None)
+        print("DEBUG nom_recette:", nom_recette)
+        neo4j_session1 = neo4j_driver.session()
+        ingredients_query = neo4j_session1.run(
+            """
+            MATCH (p:Produit)<-[UTILISE]-(:Recette {name: $nom_recette})
+            RETURN DISTINCT p.nom AS ingredient
+            """,
+            nom_recette=nom_recette,
+        )
+        ingredients = [record["ingredient"] for record in ingredients_query]
+        neo4j_session1.close()
+        print("DEBUG ingredients:", ingredients)
+        preference_marque = data.get("preferenceMarqueProduit", [])
+        liste_marques = [marque.lower() for marque in preference_marque]
+        nutriscore = data.get("indicateursDeQualiteSuperieurA", {}).get(
+            "NutriScore", None
+        )
+        print("DEBUG nutriscore:", nutriscore)
+        novascore_str = data.get("indicateursDeQualiteSuperieurA", {}).get("Nova", None)
 
-@app.route('/off_categorisation', methods=['GET'])
+        if novascore_str.isdigit():
+            novascore = int(novascore_str)
+        print("DEBUG novascore:", novascore)
+        ecoscore = data.get("indicateursDeQualiteSuperieurA", {}).get("EcoScore", None)
+        print("DEBUG ecoscore:", ecoscore)
+        liste_nutriscore = ["a", "b", "c", "d", "e"]
+        liste_novascore = [1, 2, 3, 4]
+        liste_ecoscore = ["a", "b", "c", "d", "e"]
+
+        neo4j_session = neo4j_driver.session()
+        liste_all_recommendations = []
+
+        for ingredient in ingredients:
+            liste_recomandation = []
+            equivalent_query = neo4j_session.run(
+                """
+            MATCH(p:Produit)-[EQUIVALENT]->(m:MongoProduit) 
+            WHERE p.nom CONTAINS $ingredient
+            RETURN collect(DISTINCT m.mongo_id) AS mongo_ids                                     
+            """,
+                ingredient=ingredient,
+            )
+            mongo_ids = [record["mongo_ids"] for record in equivalent_query]
+            print("DEBUG mongo_ids:", mongo_ids)
+            for mongo_id in mongo_ids:
+                counter = 4
+                current_equivalent = off.find_one({"_id": mongo_id})
+                produit_de_base = False
+                if not current_equivalent:
+                    current_equivalent = fdc.find_one({"_id": mongo_id})
+                if (
+                    len(liste_marques) > 0
+                    and current_equivalent["brands"].lower() not in liste_marques
+                ):
+                    counter -= 1
+                if not novascore or (
+                    novascore in liste_novascore
+                    and current_equivalent["nova_group"] > novascore
+                ):
+                    if current_equivalent["nova_group"] == 1:
+                        produit_de_base = True
+                    counter -= 1
+                if nutriscore.lower() not in liste_nutriscore or (
+                    nutriscore.lower() in liste_nutriscore
+                    and current_equivalent["nutriscore_grade"].lower()
+                    > nutriscore.lower()
+                ):
+                    counter -= 1
+                if ecoscore.lower() not in liste_ecoscore or (
+                    ecoscore.lower() in liste_ecoscore
+                    and current_equivalent["ecoscore_grade"].lower() > ecoscore.lower()
+                ):
+                    counter -= 1
+                if counter == 0:
+                    continue
+
+                current_equivalent_info = {
+                    "nomProduit": current_equivalent.get("product_name", ""),
+                    "marque": current_equivalent.get("brands", ""),
+                    "indicateurDeQualite": {
+                        "nutriscore_grade": current_equivalent.get(
+                            "nutriscore_grade", ""
+                        ),
+                        "Nova_group": current_equivalent.get("nova_group", ""),
+                        "ecoscore_grade": current_equivalent.get("ecoscore_grade", ""),
+                    },
+                    "categorie": current_equivalent.get("category_ca", ""),
+                    "produitDeBase": produit_de_base,
+                }
+
+                liste_recomandation.append(current_equivalent_info, counter)
+            liste_recomandation_trie = liste_recomandation.sort(
+                key=lambda x: x[1], reverse=True
+            )
+            liste_all_recommendations.append(liste_recomandation_trie)
+        neo4j_session.close()
+        return jsonify(liste_all_recommendations)
+    elif request.method == "GET":
+        return {"noPOST": "noCUISINER"}
+
+
+@app.route("/off_categorisation", methods=["GET"])
 def off_categorisation():
-    cursor = off.find({"category_ca":{"$exists":False}}).limit(100000)
+    cursor = off.find({"category_ca": {"$exists": False}}).limit(100000)
     operations = []
     for product in cursor:
         new_fields = trouver_categories(product)
         if new_fields:
-            operations.append(UpdateOne({"_id":product["_id"]},{"$set": new_fields}))
-            
+            operations.append(UpdateOne({"_id": product["_id"]}, {"$set": new_fields}))
+
     if operations:
         off.bulk_write(operations)
-    return {"results":{}}
+    return {"results": {}}
 
-@app.route('/fdc_categorisation', methods=['GET'])
+
+@app.route("/fdc_categorisation", methods=["GET"])
 def fdc_categorisation():
-    rename_food_groups_fdc(mongo_uri,mongo_db,fdc)
-    return {"results":{}}
-    
+    rename_food_groups_fdc(mongo_uri, mongo_db, fdc)
+    return {"results": {}}
 
 
 @app.route("/map_mexico_categories", methods=["POST"])
@@ -394,13 +634,13 @@ def map_mexico_categories():
         "miscellaneous foods": "misc foods",
         "meal replacements": "protein shake",
         "products for specific diets": "protein shake",
-        "CNF recipes": "cnf recipes"
+        "CNF recipes": "cnf recipes",
     }
 
     query = {
         "countries": {"$regex": "mexico", "$options": "i"},
         "categories": {"$exists": True, "$type": "string"},
-        "can_categories": {"$exists": False}  # ← évite les doublons
+        "can_categories": {"$exists": False},  # ← évite les doublons
     }
 
     for doc in collection.find(query).limit(limit):
@@ -417,22 +657,26 @@ def map_mexico_categories():
 
         if matched_value:
             collection.update_one(
-                {"_id": doc["_id"]},
-                {"$set": {"can_categories": matched_value}}
+                {"_id": doc["_id"]}, {"$set": {"can_categories": matched_value}}
             )
-            updated.append({
-                "_id": str(doc["_id"]),
-                "used_category": cat_clean,
-                "mapped_to": matched_key,
-                "can_categories": matched_value
-            })
+            updated.append(
+                {
+                    "_id": str(doc["_id"]),
+                    "used_category": cat_clean,
+                    "mapped_to": matched_key,
+                    "can_categories": matched_value,
+                }
+            )
 
-    return jsonify({
-        "status": "Mapping completed",
-        "country": "Mexico",
-        "documents_updated": len(updated),
-        "updated_documents": updated  # ← liste complète des documents modifiés
-    })
+    return jsonify(
+        {
+            "status": "Mapping completed",
+            "country": "Mexico",
+            "documents_updated": len(updated),
+            "updated_documents": updated,  # ← liste complète des documents modifiés
+        }
+    )
+
 
 @app.route("/map_usa_categories", methods=["POST"])
 def map_usa_categories():
@@ -545,16 +789,16 @@ def map_usa_categories():
         "open food facts": "misc foods",
         "non food product": "misc foods",
         "baby item": "misc foods",
-        "cat food": "misc foods"
+        "cat food": "misc foods",
     }
 
     query = {
         "$or": [
-            { "countries": { "$regex": "usa", "$options": "i" } },
-            { "countries": { "$regex": "united[- ]states", "$options": "i" } }
+            {"countries": {"$regex": "usa", "$options": "i"}},
+            {"countries": {"$regex": "united[- ]states", "$options": "i"}},
         ],
-        "categories": { "$exists": True, "$type": "string" },
-        "can_categories": { "$exists": False }
+        "categories": {"$exists": True, "$type": "string"},
+        "can_categories": {"$exists": False},
     }
 
     for doc in collection.find(query).limit(limit):
@@ -571,22 +815,26 @@ def map_usa_categories():
 
         if matched_value:
             collection.update_one(
-                {"_id": doc["_id"]},
-                {"$set": {"can_categories": matched_value}}
+                {"_id": doc["_id"]}, {"$set": {"can_categories": matched_value}}
             )
-            updated.append({
-                "_id": str(doc["_id"]),
-                "used_category": cat_clean,
-                "mapped_to": matched_key,
-                "can_categories": matched_value
-            })
+            updated.append(
+                {
+                    "_id": str(doc["_id"]),
+                    "used_category": cat_clean,
+                    "mapped_to": matched_key,
+                    "can_categories": matched_value,
+                }
+            )
 
-    return jsonify({
-        "status": "Mapping completed",
-        "country": "usa + united-states",
-        "documents_updated": len(updated),
-        "updated_documents": updated[:10]  # aperçu
-    })
+    return jsonify(
+        {
+            "status": "Mapping completed",
+            "country": "usa + united-states",
+            "documents_updated": len(updated),
+            "updated_documents": updated[:10],  # aperçu
+        }
+    )
+
 
 @app.route("/map_canada_categories", methods=["POST"])
 def map_canada_categories():
@@ -648,16 +896,16 @@ def map_canada_categories():
         "alcoholic beverages": "alcoholic beverages ",
         "red wines": "alcoholic beverages ",
         "non food product": "misc foods",
-        "open food facts": "misc foods"
+        "open food facts": "misc foods",
     }
 
     query = {
         "$or": [
-            { "countries": { "$regex": "canada", "$options": "i" } },
-            { "countries": { "$regex": "canadian", "$options": "i" } }
+            {"countries": {"$regex": "canada", "$options": "i"}},
+            {"countries": {"$regex": "canadian", "$options": "i"}},
         ],
-        "categories": { "$exists": True, "$type": "string" },
-        "can_categories": { "$exists": False }
+        "categories": {"$exists": True, "$type": "string"},
+        "can_categories": {"$exists": False},
     }
 
     for doc in collection.find(query).limit(limit):
@@ -674,22 +922,26 @@ def map_canada_categories():
 
         if matched_value:
             collection.update_one(
-                {"_id": doc["_id"]},
-                {"$set": {"can_categories": matched_value}}
+                {"_id": doc["_id"]}, {"$set": {"can_categories": matched_value}}
             )
-            updated.append({
-                "_id": str(doc["_id"]),
-                "used_category": cat_clean,
-                "mapped_to": matched_key,
-                "can_categories": matched_value
-            })
+            updated.append(
+                {
+                    "_id": str(doc["_id"]),
+                    "used_category": cat_clean,
+                    "mapped_to": matched_key,
+                    "can_categories": matched_value,
+                }
+            )
 
-    return jsonify({
-        "status": "Mapping completed",
-        "country": "Canada",
-        "documents_updated": len(updated),
-        "updated_documents": updated[:10]
-    })
+    return jsonify(
+        {
+            "status": "Mapping completed",
+            "country": "Canada",
+            "documents_updated": len(updated),
+            "updated_documents": updated[:10],
+        }
+    )
+
 
 @app.route("/export_used_category_mexico", methods=["GET"])
 def export_used_category_mexico():
@@ -697,8 +949,8 @@ def export_used_category_mexico():
     counter = Counter()
 
     query = {
-        "countries": { "$regex": "mexico", "$options": "i" },
-        "categories": { "$exists": True, "$type": "string" }
+        "countries": {"$regex": "mexico", "$options": "i"},
+        "categories": {"$exists": True, "$type": "string"},
     }
 
     for doc in collection.find(query).limit(limit):
@@ -707,23 +959,26 @@ def export_used_category_mexico():
             counter[used] += 1
 
     sorted_counts = dict(counter.most_common())
-    return jsonify({
-        "country": "Mexico",
-        "total_documents": sum(counter.values()),
-        "used_categories": sorted_counts
-    })
+    return jsonify(
+        {
+            "country": "Mexico",
+            "total_documents": sum(counter.values()),
+            "used_categories": sorted_counts,
+        }
+    )
+
 
 @app.route("/export_used_category_usa", methods=["GET"])
 def export_used_category_usa():
-    limit = int(request.args.get("limit", 10000)) #16425
+    limit = int(request.args.get("limit", 10000))  # 16425
     counter = Counter()
 
     query = {
         "$or": [
-            { "countries": { "$regex": "usa", "$options": "i" } },
-            { "countries": { "$regex": "united-states", "$options": "i" } }
+            {"countries": {"$regex": "usa", "$options": "i"}},
+            {"countries": {"$regex": "united-states", "$options": "i"}},
         ],
-        "categories": { "$exists": True, "$type": "string" }
+        "categories": {"$exists": True, "$type": "string"},
     }
 
     for doc in collection.find(query).limit(limit):
@@ -732,11 +987,14 @@ def export_used_category_usa():
             counter[used] += 1
 
     sorted_counts = dict(counter.most_common())
-    return jsonify({
-        "country": "usa + united-states",
-        "total_documents": sum(counter.values()),
-        "used_categories": sorted_counts
-    })
+    return jsonify(
+        {
+            "country": "usa + united-states",
+            "total_documents": sum(counter.values()),
+            "used_categories": sorted_counts,
+        }
+    )
+
 
 @app.route("/export_used_category_canada", methods=["GET"])
 def export_used_category_canada():
@@ -744,8 +1002,8 @@ def export_used_category_canada():
     counter = Counter()
 
     query = {
-        "countries": { "$regex": "canada", "$options": "i" },
-        "categories": { "$exists": True, "$type": "string" }
+        "countries": {"$regex": "canada", "$options": "i"},
+        "categories": {"$exists": True, "$type": "string"},
     }
 
     for doc in collection.find(query).limit(limit):
@@ -754,11 +1012,14 @@ def export_used_category_canada():
             counter[used] += 1
 
     sorted_counts = dict(counter.most_common())
-    return jsonify({
-        "country": "Canada",
-        "total_documents": sum(counter.values()),
-        "used_categories": sorted_counts
-    })
+    return jsonify(
+        {
+            "country": "Canada",
+            "total_documents": sum(counter.values()),
+            "used_categories": sorted_counts,
+        }
+    )
+
 
 @app.route("/equivalent_mongo", methods=["GET"])
 def trouver_neo_equivalent_dans_mongo():
@@ -769,16 +1030,21 @@ def trouver_neo_equivalent_dans_mongo():
     for produit in liste_produit_neo:
         equivalents_produit = trouver_liste_mongo(produit)
         # update neo
-        neo4j_session2.run("""
+        neo4j_session2.run(
+            """
         MATCH (p:Produit {nom: $nom_produit})
         UNWIND $equivalents AS eq
         MERGE (m:MongoProduit {mongo_id: eq.id})
         MERGE (p)-[s:EQUIVALENT]->(m)
         SET s.score = eq.score
-        """, nom_produit=produit["nom"], equivalents=[{"id": mongo_id, "score": score}
-        for mongo_id, score in equivalents_produit])
-    
+        """,
+            nom_produit=produit["nom"],
+            equivalents=[
+                {"id": mongo_id, "score": score}
+                for mongo_id, score in equivalents_produit
+            ],
+        )
+
     neo4j_session1.close()
     neo4j_session2.close()
-    return jsonify({"test":"test2"})
-
+    return jsonify({"test": "test2"})

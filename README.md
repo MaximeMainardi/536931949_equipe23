@@ -43,7 +43,7 @@ dans le root de mongodb
 mongorestore  --db=db_mongo /data/dump_staging/
 ```
 
-#### to create Dump
+#### to create Dump MongoDB
 dans le root de mongodb
 ```
 mongodump --db=db_mongo --collection=["la collection a dump"] --out /data/["nom de votre dossier dump"]
@@ -51,4 +51,10 @@ mongodump --db=db_mongo --collection=["la collection a dump"] --out /data/["nom 
 dans le docker container
 ```
 docker cp db_mongo:/data/["nom de votre dossier dump"] ["Chemin dossier local sauvegarde"]
+```
+
+#### to restore Neo4j
+depuis le dossier /dump_recettes du projet
+```
+docker run --rm --volumes-from db_neo4j -v ${PWD}:/backup neo4j:5 neo4j-admin database load neo4j --from-path=/backup --overwrite-destination
 ```
