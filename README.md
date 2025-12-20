@@ -1,8 +1,8 @@
 # OPEN FOOD FACTS
 
 ## Acquisition des données
-Assurez-vous d'avoir les fichiers `products.bson`, `products.metadata.json` dans 
-le dossiers `dump_staging` et le fichier `neo4j.dump` dans le dossier `dump_recettes` 
+Assurez-vous d'avoir les fichiers `off.bson`, `off.metadata.json`, `fdc.bson` , `fdc.metadata.json` dans 
+`mongo-init/dump_staging/` et le fichier `neo4j.dump` dans le dossier `neo4j_dumps` 
 avant de démarrer le projet.
 
 Vous pouvez les télécharger à partir du lien suivant: https://drive.google.com/drive/folders/1J_k_THGR2Lqr-zedXq59wOrOst0bbUg7?usp=sharing
