@@ -5,6 +5,8 @@ Assurez-vous d'avoir les fichiers `off.bson`, `off.metadata.json`, `fdc.bson` , 
 `mongo-init/dump_staging/` et le fichier `neo4j.dump` dans le dossier `neo4j_dumps` 
 avant de démarrer le projet.
 
+les fichier `run_mongo_restore.sh` et `entrypoint.sh` soit en LF
+
 Vous pouvez les télécharger à partir du lien suivant: https://drive.google.com/drive/folders/1J_k_THGR2Lqr-zedXq59wOrOst0bbUg7?usp=sharing
 
 ## Configuration
@@ -22,41 +24,7 @@ Autrement, roulez cette commande-ci:
 docker compose up
 ```
 
-### Création de dumps de données
-#### MongoDB
-Dans le root de mongoDb, exécutez la commande suivante:
-
-```
-mongodump --db=db_mongo --collection=["la collection a dump"] --out /data/["nom de votre dossier dump"]
-```
-
-Ensuite, dans le docker container, exécutez la commande suivante:
-```
-docker cp db_mongo:/data/["nom de votre dossier dump"] ["Chemin dossier local sauvegarde"]
-```
-
-### Restaurations des données
-Pour restaurer les données des bases de données, suivre les étapes suivantes.
-
-#### MongoDB
-Exécutez les commandes suivantes: 
-
-```
-docker cp ["Chemin dossier local pulled"] db_mongo:/data/dump_staging
-docker exec -it db_mongo bash
-```
-
-Ensuite, dans le root de mongoDB, exécutez la commande suivante:
-```
-mongorestore  --db=db_mongo /data/dump_staging/
-```
-
-#### Neo4j
-Depuis le dossier /dump_recettes du projet, exécutez la commande suivante:
-
-```
-docker run --rm --volumes-from db_neo4j -v ${PWD}:/backup neo4j:5 neo4j-admin database load neo4j --from-path=/backup --overwrite-destination
-```
+la restoration des dumps devraient ce faire automatiquement.
 
 ## Requêtes disponibles
 
